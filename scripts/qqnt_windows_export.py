@@ -9,8 +9,8 @@
 4. 默认使用 Windows Debug API 在 QQ 启动早期下断点，从 x64 第三参数 R8 读取数据库 key。
 5. 获取 key 后复制 ``nt_msg.db`` 及 WAL/SHM/material sidecar 到输出目录。
 
-如果本机安装了 SQLCipher CLI，可以额外传入 ``--export-plaintext`` 和
-``--sqlcipher``，把复制出的加密库导出为普通 SQLite 明文库。
+脚本默认会调用 SQLCipher CLI 导出明文库；如果 `sqlcipher.exe` 不在 PATH，
+请通过 ``--sqlcipher`` 传入真实可执行文件路径。
 """
 
 from __future__ import annotations
@@ -1149,15 +1149,17 @@ def strip_qq_database_header(encrypted_db: Path, stripped_db: Path) -> None:
 def resolve_sqlcipher(preferred: str | None) -> str | None:
     if preferred:
         candidate = Path(preferred).expanduser()
-        if candidate.exists():
+        if candidate.is_file():
             return str(candidate)
         resolved = shutil.which(preferred)
-        return resolved or preferred
+        if resolved:
+            return resolved
+        return None
 
     env_value = os.environ.get("SQLCIPHER")
     if env_value:
         candidate = Path(env_value).expanduser()
-        if candidate.exists():
+        if candidate.is_file():
             return str(candidate)
 
     for name in ("sqlcipher", "sqlcipher.exe", "sqlcipher-x64.exe"):
@@ -1186,14 +1188,17 @@ def export_with_sqlcipher(sqlcipher: str, encrypted_db: Path, plaintext_db: Path
             "",
         ]
     )
-    proc = subprocess.run(
-        [sqlcipher, str(encrypted_db)],
-        input=sql,
-        text=True,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        check=False,
-    )
+    try:
+        proc = subprocess.run(
+            [sqlcipher, str(encrypted_db)],
+            input=sql,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=False,
+        )
+    except OSError as exc:
+        raise ScriptError(f"无法运行 SQLCipher: {sqlcipher}。请确认 --sqlcipher 指向真实存在的 exe 文件。") from exc
     if proc.returncode != 0:
         raise ScriptError(f"sqlcipher 执行失败，退出码 {proc.returncode}: {proc.stderr.strip() or proc.stdout.strip()}")
 
@@ -1281,6 +1286,19 @@ def main(argv: list[str] | None = None) -> int:
     if args.static_only:
         return 0
 
+    outdir = Path(args.outdir).expanduser()
+    outdir.mkdir(parents=True, exist_ok=True)
+
+    will_decrypt = not args.no_decrypt and not args.no_copy_db
+    sqlcipher_exe = resolve_sqlcipher(args.sqlcipher) if will_decrypt else None
+    if will_decrypt and not sqlcipher_exe:
+        raise ScriptError(
+            "未找到 sqlcipher 可执行文件。请下载 SQLCipher CLI，并用 --sqlcipher 指定真实路径；"
+            "不要直接复制 README 里的占位路径。"
+            "QQBackup 提供的 Win64 版本可从 "
+            "https://github.com/QQBackup/sqlcipher-github-actions/releases/latest 下载。"
+        )
+
     if args.kill_qq_first and args.pid is None and not args.attach_running:
         print("[*] 正在结束已有 QQ.exe 进程。", flush=True)
         kill_qq_processes()
@@ -1310,8 +1328,6 @@ def main(argv: list[str] | None = None) -> int:
             kill_spawned_on_timeout=not args.keep_qq_on_timeout,
         )
 
-    outdir = Path(args.outdir).expanduser()
-    outdir.mkdir(parents=True, exist_ok=True)
     print("")
     print("=" * 48)
     print(f"QQ NT 数据库 key: {hook_result.key}")
@@ -1332,13 +1348,6 @@ def main(argv: list[str] | None = None) -> int:
     stripped_db = None
     extract_outdir = None
     if not args.no_decrypt and not args.no_copy_db:
-        sqlcipher_exe = resolve_sqlcipher(args.sqlcipher)
-        if not sqlcipher_exe:
-            raise ScriptError(
-                "未找到 sqlcipher 可执行文件。请安装 SQLCipher，或用 --sqlcipher 指定路径。"
-                "QQBackup 提供的 Win64 版本可从 "
-                "https://github.com/QQBackup/sqlcipher-github-actions/releases/latest 下载。"
-            )
         encrypted_db = outdir / args.db_name
         stripped_db = outdir / f"{Path(args.db_name).stem}.sqlcipher.db"
         plaintext_db = Path(args.plaintext_db).expanduser() if args.plaintext_db else outdir / "nt_msg_plaintext.db"

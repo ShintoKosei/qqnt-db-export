@@ -1,6 +1,7 @@
 RE/
 out/
 exports/
+tools/
 *.db
 *.db-*
 *.sqlite
