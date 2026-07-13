@@ -113,6 +113,13 @@ python scripts\qqnt_extract_self_messages.py --db RE\qq_nt_msg_plaintext.db --ac
 - Windows 默认会输出 `windows_qq_key_summary.json`，里面包含 key，只能保存在本机私密目录。
 - 如果要发布研究结论，请先脱敏，不要泄漏聊天对象、群号、链接、文件名或原文。
 
+## 🧩 依赖说明
+
+- 默认 Windows 导出和语料提取脚本只使用 Python 标准库，不需要 `requirements.txt`。
+- SQLCipher CLI 已内置在 `tools\sqlcipher`。
+- Android 导出依赖 Frida CLI / frida-server 和 root 环境。
+- Windows 的可选 `--backend frida` 需要额外安装 Python 包：`python -m pip install frida`。
+
 ## 🧯 常见问题
 
 - **Windows 抓不到 key**：使用 `--kill-qq-first`，确保 QQ 从脚本启动；不要先手动打开 QQ。
@@ -122,6 +129,10 @@ python scripts\qqnt_extract_self_messages.py --db RE\qq_nt_msg_plaintext.db --ac
 - **Android 没开始导出**：打开任意聊天或切换页面，让 QQ 触发数据库访问。
 - **Android 导出 ret 非 0**：删除手机旧的 `qq_nt_msg_plaintext.db` 后重试。
 - **提取文本有乱码**：QQ NT 历史消息结构可能变化，建议抽样检查后再用于分析。
+
+## 🔎 相似项目
+
+- [artiga033/ntdb_unwrap](https://github.com/artiga033/ntdb_unwrap)：面向 NTQQ 数据库的一键解密/解析工具，提供 Rust 实现，可作为不同实现路线的参考。
 
 ## 📄 License
 

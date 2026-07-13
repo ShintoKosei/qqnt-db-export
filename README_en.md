@@ -113,6 +113,13 @@ Output files:
 - Windows export writes `windows_qq_key_summary.json` by default; it contains the database key and must stay private.
 - If you publish research notes, redact chat peers, group IDs, links, filenames, and message content first.
 
+## 🧩 Dependencies
+
+- The default Windows export and corpus extraction scripts use only the Python standard library, so this repository does not need a `requirements.txt`.
+- SQLCipher CLI is bundled in `tools\sqlcipher`.
+- Android export requires Frida CLI / frida-server and a rooted device.
+- The optional Windows `--backend frida` mode needs the Python package: `python -m pip install frida`.
+
 ## 🧯 FAQ
 
 - **Windows cannot capture the key**: use `--kill-qq-first` and let the script start QQ. Do not open QQ manually first.
@@ -122,6 +129,10 @@ Output files:
 - **Android export does not start**: open any chat or switch pages in QQ to trigger database access.
 - **Android export returns non-zero**: delete the old `qq_nt_msg_plaintext.db` on the phone and try again.
 - **Extracted text looks garbled**: QQ NT message structures may change; sample-check the output before using it.
+
+## 🔎 Similar Projects
+
+- [artiga033/ntdb_unwrap](https://github.com/artiga033/ntdb_unwrap): a Rust-based one-click decrypt/parse tool for NTQQ databases, useful as a reference for a different implementation approach.
 
 ## 📄 License
 
