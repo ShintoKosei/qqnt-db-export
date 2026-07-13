@@ -1,0 +1,8 @@
+SQLCipher ref: v4.17.0
+Build patches: mingw-splitmix64-immediate-workaround
+Source executable: source/sqlite3.exe
+Packaged executable: sqlcipher.exe
+SQLCipher CLI version: 3.53.3 2026-06-26 20:14:12 d4c0e51e4aeb96955b99185ab9cde75c339e2c29c3f3f12428d364a10d78alt1 (64-bit) (SQLCipher 4.17.0 community)
+SQLCipher pragma cipher_version: 4.17.0 community
+Target: Windows x64 UCRT
+Built from: https://github.com/sqlcipher/sqlcipher

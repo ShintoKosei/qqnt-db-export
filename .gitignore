@@ -1,7 +1,9 @@
 RE/
 out/
 exports/
-tools/
+tools/*
+!tools/sqlcipher/
+!tools/sqlcipher/**
 *.db
 *.db-*
 *.sqlite

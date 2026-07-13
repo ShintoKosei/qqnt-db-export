@@ -40,7 +40,7 @@ The Windows script uses the **debugger backend** by default and does not depend 
 8. Uses SQLCipher CLI to export a plaintext SQLite database.
 9. Extracts self-authored messages when `--account` is provided.
 
-Download the companion [SQLCipher CLI build](https://github.com/ShintoKosei/sqlcipher-windows-builds/releases/latest), extract it into `tools\sqlcipher`, and make sure `tools\sqlcipher\sqlcipher.exe` exists.
+The repository includes a companion SQLCipher CLI at `tools\sqlcipher\sqlcipher.exe`. To update SQLCipher, download a newer zip from [sqlcipher-windows-builds releases](https://github.com/ShintoKosei/sqlcipher-windows-builds/releases/latest) and replace the `tools\sqlcipher` directory.
 
 ### Example
 
@@ -116,6 +116,7 @@ Output files:
 ## 🧯 FAQ
 
 - **Windows cannot capture the key**: use `--kill-qq-first` and let the script start QQ. Do not open QQ manually first.
+- **The QQ number is invalid**: replace `YOUR_QQ_NUMBER` with your real numeric QQ number, for example `--account 12345678`.
 - **Windows cannot find SQLCipher**: download SQLCipher CLI and pass the real `sqlcipher.exe` path with `--sqlcipher`.
 - **Keep only encrypted Windows database files**: add `--no-decrypt`.
 - **Android export does not start**: open any chat or switch pages in QQ to trigger database access.

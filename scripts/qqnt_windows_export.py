@@ -40,6 +40,12 @@ except ImportError:  # pragma: no cover - 该脚本只面向 Windows。
 TARGET_LOG_STRING = b"nt_sqlite3_key_v2: db=%p zDb=%s"
 DEFAULT_DB_BASENAME = "nt_msg.db"
 SQLCIPHER_RELEASE_URL = "https://github.com/ShintoKosei/sqlcipher-windows-builds/releases/latest"
+ACCOUNT_PLACEHOLDERS = {
+    "YOUR_QQ_NUMBER",
+    "YOUR_ACCOUNT",
+    "QQ_NUMBER",
+    "YOUR_QQ",
+}
 
 
 class ScriptError(RuntimeError):
@@ -599,6 +605,33 @@ def find_default_db_dir(account: str | None = None, db_basename: str = DEFAULT_D
         accounts = ", ".join(path.parts[-4] for path in candidates[:10])
         raise ScriptError(f"发现多个 QQ 数据库目录 ({accounts})，请用 --account 指定账号。")
     return None
+
+
+def normalize_account_arg(account: str | None) -> str | None:
+    if account is None:
+        return None
+
+    value = account.strip()
+    if not value:
+        raise ScriptError("--account 不能为空，请填写真实 QQ 号。")
+
+    upper_value = value.upper()
+    if upper_value in ACCOUNT_PLACEHOLDERS or "YOUR_QQ" in upper_value or "QQ_NUMBER" in upper_value:
+        raise ScriptError(
+            "请把 --account YOUR_QQ_NUMBER 替换成你的真实 QQ 号，"
+            "例如 --account 12345678。"
+        )
+
+    if not value.isdigit():
+        raise ScriptError(f"--account 需要填写纯数字 QQ 号，当前值是 {value!r}。")
+
+    if len(value) < 5:
+        raise ScriptError(
+            f"--account 看起来不像有效 QQ 号: {value}。"
+            "请填写真实 QQ 号，或使用 --db-dir 指定 nt_db 目录。"
+        )
+
+    return value
 
 
 def copy_db_bundle(db_dir: Path, outdir: Path, db_basename: str = DEFAULT_DB_BASENAME) -> list[Path]:
@@ -1277,6 +1310,7 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
+    args.account = normalize_account_arg(args.account)
 
     if os.name != "nt":
         raise ScriptError("此脚本仅支持 Windows。")
@@ -1343,7 +1377,14 @@ def main(argv: list[str] | None = None) -> int:
     if not args.no_copy_db:
         db_dir = Path(args.db_dir).expanduser() if args.db_dir else find_default_db_dir(args.account, args.db_name)
         if db_dir is None:
-            raise ScriptError("未能定位 nt_db 目录，请使用 --account 或 --db-dir。")
+            if args.account:
+                expected_db_dir = Path.home() / "Documents" / "Tencent Files" / args.account / "nt_qq" / "nt_db"
+                raise ScriptError(
+                    f"未找到账号 {args.account} 的 nt_db 目录: {expected_db_dir}。"
+                    "请确认 --account 是真实 QQ 号，不要使用 YOUR_QQ_NUMBER；"
+                    "或使用 --db-dir 指定 nt_db 目录。"
+                )
+            raise ScriptError("未能定位 nt_db 目录，请使用 --account 填写真实 QQ 号，或使用 --db-dir。")
         copied = copy_db_bundle(db_dir, outdir, args.db_name)
         if not copied:
             raise ScriptError(f"没有从 {db_dir} 复制到任何数据库文件")
