@@ -41,24 +41,28 @@ python scripts\qqnt_windows_export.py --kill-qq-first --account YOUR_QQ_NUMBER -
 
 注意：截至当前测试，`rotki-pysqlcipher3` 在 PyPI 上提供 Windows `cp311/cp312` wheel；如果你使用 Python 3.14，pip 可能会退回源码构建并失败。这种情况下请使用 Python 3.11/3.12 虚拟环境，或使用 SQLCipher CLI 后端。
 
-SQLCipher CLI 备用方案：可以把 `sqlcipher.exe` 放进 `PATH`，也可以用 `--sqlcipher` 指定真实路径。Windows 可用版本可从 QQBackup 的 SQLCipher 构建下载：
+SQLCipher CLI 备用方案：可以把 `sqlcipher.exe` 放进 `PATH`，也可以用 `--sqlcipher` 指定真实路径。推荐使用独立维护的 Windows 构建仓：
 
 ```text
-https://github.com/QQBackup/sqlcipher-github-actions/releases/latest
+https://github.com/ShintoKosei/sqlcipher-windows-builds/releases/latest
 ```
 
 用 GitHub CLI 下载到本仓库的 `tools\sqlcipher` 示例：
 
 ```powershell
-mkdir tools\sqlcipher
-gh release download latest --repo QQBackup/sqlcipher-github-actions --pattern sqlcipher-x64.exe --dir tools\sqlcipher
+New-Item -ItemType Directory -Force tools\sqlcipher | Out-Null
+gh release download --repo ShintoKosei/sqlcipher-windows-builds --pattern "*.zip" --dir tools\sqlcipher
+$zip = Get-ChildItem tools\sqlcipher\sqlcipher-*-windows-x64-ucrt.zip | Select-Object -First 1
+Expand-Archive -LiteralPath $zip.FullName -DestinationPath tools\sqlcipher -Force
 ```
 
 推荐命令：
 
 ```powershell
-python scripts\qqnt_windows_export.py --kill-qq-first --account YOUR_QQ_NUMBER --outdir RE\windows_qq_export --decrypt-backend cli --sqlcipher tools\sqlcipher\sqlcipher-x64.exe
+python scripts\qqnt_windows_export.py --kill-qq-first --account YOUR_QQ_NUMBER --outdir RE\windows_qq_export --decrypt-backend cli --sqlcipher tools\sqlcipher\sqlcipher.exe
 ```
+
+如果新构建仓暂无 Release，可临时参考 QQBackup 的历史构建：`https://github.com/QQBackup/sqlcipher-github-actions/releases/latest`。
 
 只做静态定位，不启动 QQ：
 
@@ -135,7 +139,7 @@ python scripts\qqnt_extract_self_messages.py --db RE\qq_nt_msg_plaintext.db --ac
 
 - **Windows 抓不到 key**：使用 `--kill-qq-first`，确保 QQ 从脚本启动；不要先手动打开 QQ。
 - **安装 `rotki-pysqlcipher3` 失败**：确认 Python 版本。当前 PyPI wheel 覆盖 Windows Python 3.11/3.12；Python 3.14 可改用 SQLCipher CLI。
-- **Windows 提示找不到 SQLCipher**：下载 SQLCipher CLI，或用 `--sqlcipher` 指向真实存在的 `sqlcipher-x64.exe`。
+- **Windows 提示找不到 SQLCipher**：下载 SQLCipher CLI，或用 `--sqlcipher` 指向真实存在的 `sqlcipher.exe`。
 - **Windows 只想保留加密库**：加上 `--no-decrypt`。
 - **Android 没开始导出**：打开任意聊天或切换页面，让 QQ 触发数据库访问。
 - **Android 导出 ret 非 0**：删除手机旧的 `qq_nt_msg_plaintext.db` 后重试。
@@ -148,6 +152,7 @@ MIT License
 ## 🙏 鸣谢
 
 - [QQBackup/QQDecrypt](https://github.com/QQBackup/QQDecrypt)：QQ NT 数据库解密资料与 SQLCipher 参数参考。
+- [ShintoKosei/sqlcipher-windows-builds](https://github.com/ShintoKosei/sqlcipher-windows-builds)：本项目配套的 Windows SQLCipher CLI 构建仓。
 
 ---
 
