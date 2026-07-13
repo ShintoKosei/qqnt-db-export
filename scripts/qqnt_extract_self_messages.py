@@ -267,6 +267,7 @@ def main() -> int:
     parser.add_argument("--db", required=True, help="明文 nt_msg.db 路径")
     parser.add_argument("--account", required=True, type=int, help="本人 QQ 号")
     parser.add_argument("--outdir", default="RE/qq_export", help="输出目录")
+    parser.add_argument("--quiet", action="store_true", help="只打印简短完成信息，不输出完整 summary")
     args = parser.parse_args()
 
     outdir = Path(args.outdir)
@@ -330,7 +331,15 @@ def main() -> int:
         "examples": examples,
     }
     summary_path.write_text(json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8")
-    print(json.dumps(summary, ensure_ascii=False, indent=2))
+    if args.quiet:
+        print(
+            "提取完成："
+            f"本人消息 {stats['own_messages']} 条，"
+            f"文本消息 {stats['messages_with_content']} 条，"
+            f"输出目录 {outdir}"
+        )
+    else:
+        print(json.dumps(summary, ensure_ascii=False, indent=2))
     con.close()
     return 0
 

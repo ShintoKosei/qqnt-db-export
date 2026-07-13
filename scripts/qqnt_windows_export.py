@@ -1138,6 +1138,35 @@ def shell_quote_sql(value: str) -> str:
     return value.replace("'", "''")
 
 
+def strip_qq_database_header(encrypted_db: Path, stripped_db: Path) -> None:
+    """去掉 QQ NT 数据库前 1024 字节的 plaintext header。"""
+    stripped_db.parent.mkdir(parents=True, exist_ok=True)
+    with encrypted_db.open("rb") as source, stripped_db.open("wb") as destination:
+        source.seek(1024)
+        shutil.copyfileobj(source, destination)
+
+
+def resolve_sqlcipher(preferred: str | None) -> str | None:
+    if preferred:
+        candidate = Path(preferred).expanduser()
+        if candidate.exists():
+            return str(candidate)
+        resolved = shutil.which(preferred)
+        return resolved or preferred
+
+    env_value = os.environ.get("SQLCIPHER")
+    if env_value:
+        candidate = Path(env_value).expanduser()
+        if candidate.exists():
+            return str(candidate)
+
+    for name in ("sqlcipher", "sqlcipher.exe", "sqlcipher-x64.exe"):
+        resolved = shutil.which(name)
+        if resolved:
+            return resolved
+    return None
+
+
 def export_with_sqlcipher(sqlcipher: str, encrypted_db: Path, plaintext_db: Path, key: str) -> None:
     plaintext_db.parent.mkdir(parents=True, exist_ok=True)
     if plaintext_db.exists():
@@ -1146,6 +1175,10 @@ def export_with_sqlcipher(sqlcipher: str, encrypted_db: Path, plaintext_db: Path
     sql = "\n".join(
         [
             f"PRAGMA key = '{shell_quote_sql(key)}';",
+            "PRAGMA cipher_page_size = 4096;",
+            "PRAGMA kdf_iter = 4000;",
+            "PRAGMA cipher_hmac_algorithm = HMAC_SHA1;",
+            "PRAGMA cipher_default_kdf_algorithm = PBKDF2_HMAC_SHA512;",
             f"ATTACH DATABASE '{shell_quote_sql(str(plaintext_db))}' AS plaintext KEY '';",
             "SELECT sqlcipher_export('plaintext');",
             "DETACH DATABASE plaintext;",
@@ -1163,6 +1196,28 @@ def export_with_sqlcipher(sqlcipher: str, encrypted_db: Path, plaintext_db: Path
     )
     if proc.returncode != 0:
         raise ScriptError(f"sqlcipher 执行失败，退出码 {proc.returncode}: {proc.stderr.strip() or proc.stdout.strip()}")
+
+
+def run_self_message_extractor(plaintext_db: Path, account: str, outdir: Path) -> None:
+    extractor = Path(__file__).with_name("qqnt_extract_self_messages.py")
+    if not extractor.exists():
+        raise ScriptError(f"未找到提取脚本: {extractor}")
+    cmd = [
+        sys.executable,
+        str(extractor),
+        "--db",
+        str(plaintext_db),
+        "--account",
+        str(account),
+        "--outdir",
+        str(outdir),
+        "--quiet",
+    ]
+    proc = subprocess.run(cmd, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False)
+    if proc.stdout.strip():
+        print(proc.stdout.strip())
+    if proc.returncode != 0:
+        raise ScriptError(f"提取本人消息失败: {proc.stderr.strip() or proc.stdout.strip()}")
 
 
 def parse_accept_lengths(value: str) -> set[int]:
@@ -1193,13 +1248,16 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--account", help="QQ 号，用于定位 Documents/Tencent Files/<QQ号>/nt_qq/nt_db。")
     parser.add_argument("--db-dir", help="包含 nt_msg.db 的目录；不传时尽量自动检测。")
     parser.add_argument("--db-name", default=DEFAULT_DB_BASENAME, help="要复制的数据库文件名，默认 nt_msg.db。")
-    parser.add_argument("--outdir", default="RE/windows_qq_export", help="key 摘要和数据库复制输出目录。")
+    parser.add_argument("--outdir", default="RE/windows_qq_export", help="key 摘要、数据库和提取结果输出目录。")
     parser.add_argument("--no-copy-db", action="store_true", help="只抓 key，不复制数据库文件。")
     parser.add_argument("--timeout", type=float, default=180.0, help="等待 key 的秒数，默认 180。")
     parser.add_argument("--accept-key-lengths", type=parse_accept_lengths, default={16}, help="接受的 key 长度，逗号分隔，默认 16。")
-    parser.add_argument("--export-plaintext", action="store_true", help="调用 SQLCipher CLI 导出明文 SQLite 数据库。")
+    parser.add_argument("--no-decrypt", action="store_true", help="跳过 SQLCipher 自动解密。")
+    parser.add_argument("--export-plaintext", action="store_true", help="兼容旧参数；当前默认会自动解密。")
     parser.add_argument("--sqlcipher", nargs="?", const="sqlcipher", help="SQLCipher 可执行文件路径或命令名。")
     parser.add_argument("--plaintext-db", help="明文数据库输出路径，默认 <outdir>/nt_msg_plaintext.db。")
+    parser.add_argument("--no-extract", action="store_true", help="跳过本人消息提取。")
+    parser.add_argument("--extract-outdir", help="本人消息提取输出目录，默认 <outdir>/qq_export。")
     return parser
 
 
@@ -1271,15 +1329,32 @@ def main(argv: list[str] | None = None) -> int:
         print(f"已复制 {len(copied)} 个文件到 {outdir}")
 
     plaintext_db = None
-    sqlcipher_exe = args.sqlcipher
-    if args.export_plaintext:
-        sqlcipher_exe = sqlcipher_exe or shutil.which("sqlcipher")
+    stripped_db = None
+    extract_outdir = None
+    if not args.no_decrypt and not args.no_copy_db:
+        sqlcipher_exe = resolve_sqlcipher(args.sqlcipher)
         if not sqlcipher_exe:
-            raise ScriptError("未找到 sqlcipher 可执行文件。请安装 SQLCipher，或用 --sqlcipher 指定路径。")
+            raise ScriptError(
+                "未找到 sqlcipher 可执行文件。请安装 SQLCipher，或用 --sqlcipher 指定路径。"
+                "QQBackup 提供的 Win64 版本可从 "
+                "https://github.com/QQBackup/sqlcipher-github-actions/releases/latest 下载。"
+            )
         encrypted_db = outdir / args.db_name
+        stripped_db = outdir / f"{Path(args.db_name).stem}.sqlcipher.db"
         plaintext_db = Path(args.plaintext_db).expanduser() if args.plaintext_db else outdir / "nt_msg_plaintext.db"
-        export_with_sqlcipher(sqlcipher_exe, encrypted_db, plaintext_db, hook_result.key)
+        print("[*] 正在移除 QQ NT 数据库前 1024 字节 header。")
+        strip_qq_database_header(encrypted_db, stripped_db)
+        print(f"已生成 SQLCipher 输入库: {stripped_db}")
+        print("[*] 正在使用 SQLCipher 导出明文 SQLite 数据库。")
+        export_with_sqlcipher(sqlcipher_exe, stripped_db, plaintext_db, hook_result.key)
         print(f"明文数据库已导出到 {plaintext_db}")
+
+        if not args.no_extract and args.account:
+            extract_outdir = Path(args.extract_outdir).expanduser() if args.extract_outdir else outdir / "qq_export"
+            print("[*] 正在从明文库提取本人消息。")
+            run_self_message_extractor(plaintext_db, args.account, extract_outdir)
+        elif not args.no_extract:
+            print("[!] 未提供 --account，已跳过本人消息提取。")
 
     summary = {
         "qq_version": install.version,
@@ -1294,7 +1369,9 @@ def main(argv: list[str] | None = None) -> int:
         "key": hook_result.key,
         "db_dir": str(db_dir) if db_dir else None,
         "copied_files": [str(path) for path in copied],
+        "stripped_db": str(stripped_db) if stripped_db else None,
         "plaintext_db": str(plaintext_db) if plaintext_db else None,
+        "extract_outdir": str(extract_outdir) if extract_outdir else None,
     }
     write_summary(outdir / "windows_qq_key_summary.json", summary)
     print(f"摘要已写入 {outdir / 'windows_qq_key_summary.json'}")
