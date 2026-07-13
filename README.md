@@ -1,4 +1,4 @@
-# QQ NT 数据库导出工具 🚀
+# qqnt-db-export 🚀
 
 > 🌐 Prefer English? See the short [English section](#english).
 
