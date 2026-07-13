@@ -128,6 +128,10 @@ python scripts\qqnt_extract_self_messages.py --db RE\qq_nt_msg_plaintext.db --ac
 
 MIT License
 
+## 🙏 鸣谢
+
+- [QQBackup/QQDecrypt](https://github.com/QQBackup/QQDecrypt)：QQ NT 数据库解密资料与 SQLCipher 参数参考。
+
 ---
 
 ## English
